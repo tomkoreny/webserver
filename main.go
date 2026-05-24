@@ -36,8 +36,16 @@ func authMiddleware(next http.Handler) http.Handler {
 		var id int
 		if r.Header.Get("token") != "" {
 			err := database.Db.QueryRow("SELECT user_id FROM logins WHERE token = ?", r.Header.Get("token")).Scan(&id)
+			if err == sql.ErrNoRows {
+				resp, _ := json.Marshal(map[string]interface{}{"error": "bad_token"})
+				w.Write(resp)
+				return
+			}
 			if err != nil {
-				panic(err)
+				resp, _ := json.Marshal(map[string]interface{}{"error": "auth_error"})
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write(resp)
+				return
 			}
 			if id == 0 {
 				resp, _ := json.Marshal(map[string]interface{}{"error": "bad_token"})
