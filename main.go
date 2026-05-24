@@ -31,6 +31,20 @@ func init() {
 	}
 }
 
+func recoverMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Printf("panic handling request: %v", err)
+				resp, _ := json.Marshal(map[string]interface{}{"error": "internal_error"})
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write(resp)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var id int
@@ -83,7 +97,7 @@ func queryHand() http.Handler {
 		params := graphql.Params{Schema: schema, RequestString: q, Context: r.Context(), VariableValues: v}
 		ret := graphql.Do(params)
 		if len(ret.Errors) > 0 {
-			log.Fatalf("failed to execute graphql operation, errors: %+v", ret.Errors)
+			log.Printf("failed to execute graphql operation, errors: %+v", ret.Errors)
 		}
 
 		resp, _ := json.Marshal(ret)
@@ -144,6 +158,8 @@ func main() {
 		panic(err.Error())
 	}
 	defer db.Close()
+	db.SetMaxOpenConns(5)
+	db.SetMaxIdleConns(2)
 	database.Connect(db)
 
 	rootQuery := graphql.ObjectConfig{Name: "RootQuery", Fields: Types.RootQuery}
@@ -260,6 +276,6 @@ func main() {
 		AllowCredentials: true,
 	})
 	fmt.Println("APP FUCKING INITIALIZED!")
-	log.Fatal(http.ListenAndServe(":"+port, c.Handler(mux)))
+	log.Fatal(http.ListenAndServe(":"+port, c.Handler(recoverMiddleware(mux))))
 
 }
