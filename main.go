@@ -124,7 +124,14 @@ func main() {
 		hostUrl = "tcp(" + u.Host + ")"
 	}
 
-	db, err := sql.Open(u.Scheme, u.User.String()+"@"+hostUrl+u.Path)
+	dsn := u.User.String() + "@" + hostUrl + u.Path
+	params := u.Query()
+	params.Set("allowNativePasswords", "true")
+	if encodedParams := params.Encode(); encodedParams != "" {
+		dsn += "?" + encodedParams
+	}
+
+	db, err := sql.Open(u.Scheme, dsn)
 	if err != nil {
 		panic(err.Error())
 	}
